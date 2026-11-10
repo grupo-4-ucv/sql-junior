@@ -4,27 +4,8 @@ Simulador de bases de datos MySQL en HTML, CSS y JavaScript. El estudiante vive 
 
 No necesita servidor ni base de datos: todo corre en el navegador.
 
-## Publicarlo gratis
-
-**GitHub Pages**
-
-1. Crea un repositorio público en GitHub y sube todo el contenido de esta carpeta (el archivo `index.html` debe quedar en la raíz).
-2. En el repositorio entra a Settings > Pages.
-3. En "Source" elige "Deploy from a branch", rama `main`, carpeta `/ (root)` y guarda.
-4. En uno o dos minutos el juego estará en `https://TU_USUARIO.github.io/NOMBRE_DEL_REPOSITORIO/`.
-
-**Cloudflare Pages**
-
-1. En el panel de Cloudflare entra a Workers & Pages > Create > Pages > Upload assets.
-2. Arrastra esta carpeta completa y publica. No hay paso de compilación.
-
-**Google Sites**: úsalo solo como portal con un botón que enlace a la dirección anterior. No incrustes el juego dentro de Sites, porque el marco limita el guardado y los bloqueos.
-
-También funciona abriendo `index.html` directamente desde una carpeta o USB.
-
 ## Cómo se juega
 
-- Registro con ID, nombres y apellidos. El ID genera los datos: cada estudiante recibe una base distinta (nombres, montos e identificadores), así que las respuestas de un compañero no le sirven.
 - Elige una empresa. No puede cambiarla hasta terminar la semana, presentar el reporte y superar el 80%.
 - Cinco días (lunes a viernes), 25 solicitudes por empresa:
 
@@ -40,21 +21,6 @@ También funciona abriendo `index.html` directamente desde una carpeta o USB.
 - Dos pistas por día. Cada pista resta 10 puntos a la solicitud donde se usa.
 - Un descanso de 15 minutos con cuenta regresiva (botón "Descanso"). El reloj del día se detiene.
 - Cada solicitud vale 100 puntos: 80 por el resultado y 20 por buenas prácticas. Cada entrega incorrecta resta 5 (máximo 20). Omitir una solicitud da 0 puntos y muestra la solución.
-
-## Lo que necesita saber el docente
-
-- **Clave docente:** `DOCENTE-2026`. Se pide para sellar el reporte final ("reporte presentado") y para borrar el progreso desde la pantalla de inicio. Cámbiala con `docente.html` (genera una huella que se pega en `js/config.js`).
-- **Reporte final:** se ve en pantalla. Incluye puntaje global, por día y por habilidad, logros, puntos por mejorar, tiempos, pistas, salidas de la ventana e intentos de pegado. Trae un código de verificación que se puede comprobar en `docente.html`.
-- **Si no supera el 80%:** puede repetir la semana. Los datos se generan de nuevo y son distintos.
-- **Ajustes:** en `js/config.js` están el porcentaje de aprobación, las pistas por día, los descuentos y la duración del descanso.
-
-## Medidas contra el copiado
-
-- Datos distintos por estudiante y solicitudes que no mencionan tablas, columnas ni identificadores: hay que explorar la base para descubrirlos.
-- No se puede seleccionar ni copiar el texto de las solicitudes y resultados; el editor no acepta pegado ni arrastre.
-- El reporte registra cuántas veces salió de la ventana, por cuánto tiempo y cuántas veces intentó pegar o copiar.
-
-Límites que conviene conocer: ningún navegador puede impedir una captura de pantalla o una foto, el avance se guarda en el navegador (si se borran los datos del sitio, se pierde) y el código del juego es visible para quien abra las herramientas de desarrollador.
 
 ## Qué entiende el simulador
 
