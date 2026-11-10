@@ -1,0 +1,9 @@
+{
+  "name": "sql-junior",
+  "version": "1.0.0",
+  "description": "Simulador de bases de datos MySQL para estudiantes",
+  "private": true,
+  "scripts": {
+    "test": "node tests/motor.js && node tests/retos.js 20 && node tests/alternativas.js"
+  }
+}
