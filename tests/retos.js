@@ -1,6 +1,9 @@
 // Prueba de todos los retos con varias semillas: node tests/retos.js [cantidad_de_semillas]
 global.SJ = {};
 ['config', 'engine', 'datos', 'charlas', 'esc_autoandes', 'esc_mercapixel', 'esc_novatel', 'nucleo'].forEach(m => { try { require('../js/' + m + '.js'); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; } });
+// los escenarios intermedios en claro solo existen en la carpeta privada
+try { require('fs').readdirSync(__dirname + '/../privado').filter(f => /^esc_.*\.js$/.test(f)).forEach(f => require('../privado/' + f)); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+const SOLO = process.argv[4];
 const init = require('../vendor/sql-asm.js');
 const cw = console.warn; console.warn = () => {};
 const N = +(process.argv[2] || 12), VER = process.argv[3] === 'v';
@@ -8,8 +11,9 @@ init().then(SQL => {
   console.warn = cw;
   let fallos = 0; const fallo = (...a) => { fallos++; console.log('FALLO', ...a); };
   const volcado = E => JSON.stringify(Array.from(E.cat.values()).map(t => [t.name, t.cols.map(c => c.name + ':' + c.type), E.raw('SELECT * FROM "' + t.name + '"')]));
-  for (const id of SJ.ORDEN_ESCENARIOS) {
-    const esc = SJ.escenarios[id]; if (!esc) { console.log('(sin escenario ' + id + ')'); continue; }
+  for (const id of Object.keys(SJ.escenarios)) {
+    if (SOLO && SOLO !== id) continue;
+    const esc = SJ.escenarios[id];
     const t0 = Date.now(); let filasRef = {};
     for (let s = 0; s < N; s++) {
       const semilla = 'ALU' + (1000 + s * 37) + '|' + id + '|1';
@@ -23,7 +27,8 @@ init().then(SQL => {
           sim.inicia(d, i, []); sim.E.sel = true;
           if (typeof R.texto === 'function') R.texto(sim.f);
           R.pistas.forEach(p => typeof p === 'function' && p(sim.f));
-          if (R.pistas.length < 2) fallo(tag, 'menos de 2 pistas');
+          if (R.pistas.length < (esc.nivel === 'intermedio' ? 1 : 2)) fallo(tag, 'faltan pistas');
+          if (!SJ.HABILIDADES[R.hab]) fallo(tag, 'habilidad desconocida ' + R.hab);
           let v = sim.evalua();
           if (v.ok) fallo(tag, 'pasa sin resolver');
           if (R.ref) {
@@ -48,7 +53,8 @@ init().then(SQL => {
       }));
       // repeticion determinista
       const antes = volcado(sim.E);
-      sim.restaura(log, log.length, 4, 4, [], true);
+      const ud = esc.dias.length - 1; sim.restaura(log, log.length, ud, esc.dias[ud].retos.length - 1, [], true);
+      if (sim.E.tx) fallo(id, semilla, 'queda una transaccion abierta');
       if (volcado(sim.E) !== antes) fallo(id, semilla, 'la repeticion del registro no reproduce la base');
       sim.E.db.close();
     }

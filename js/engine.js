@@ -8,11 +8,12 @@
     INSERT INTO VALUES UPDATE SET DELETE CREATE TABLE DATABASE ALTER DROP TRUNCATE ADD COLUMN MODIFY CHANGE RENAME TO
     PRIMARY KEY FOREIGN REFERENCES CONSTRAINT UNIQUE INDEX DEFAULT AUTO_INCREMENT IF EXISTS USE SHOW TABLES DATABASES
     DESCRIBE EXPLAIN JOIN INNER LEFT RIGHT OUTER CROSS NATURAL ON USING UNION ALL CASE WHEN THEN ELSE END TRUE FALSE
-    UNSIGNED CHECK CASCADE RESTRICT INTERVAL REGEXP DIV XOR WITH TEMPORARY`);
+    UNSIGNED CHECK CASCADE RESTRICT INTERVAL REGEXP DIV XOR WITH TEMPORARY VIEW START TRANSACTION COMMIT ROLLBACK OVER PARTITION`);
   const FUNCS = W(`COUNT SUM AVG MIN MAX ROUND UPPER LOWER TRIM LTRIM RTRIM CONCAT CONCAT_WS LENGTH CHAR_LENGTH REPLACE
     SUBSTRING SUBSTR LEFT RIGHT NOW CURDATE YEAR MONTH DAY DATEDIFF DATE_FORMAT IFNULL COALESCE NULLIF IF ABS CEIL
     CEILING FLOOR MOD DATE DATE_ADD DATE_SUB TIMESTAMPDIFF MONTHNAME DAYNAME DAYOFWEEK GROUP_CONCAT UCASE LCASE ISNULL
-    DATABASE VERSION USER LPAD RPAD REVERSE INSTR LOCATE POW POWER SQRT TRUNCATE FORMAT CAST`);
+    DATABASE VERSION USER LPAD RPAD REVERSE INSTR LOCATE POW POWER SQRT TRUNCATE FORMAT CAST
+    ROW_NUMBER RANK DENSE_RANK LAG LEAD GREATEST LEAST EXISTS`);
   const INTT = W('INT INTEGER TINYINT SMALLINT MEDIUMINT BIGINT BOOLEAN BOOL BIT YEAR');
   const NUMT = W('DECIMAL NUMERIC FLOAT DOUBLE REAL DEC');
   const DATET = W('DATE DATETIME TIMESTAMP TIME');
@@ -24,7 +25,7 @@
   const FNMAP = {
     LEFT: 'my_left', RIGHT: 'my_right', IF: 'iif', NOW: 'my_now', SYSDATE: 'my_now', CURDATE: 'my_curdate', DATE_ADD: 'my_date_add',
     ADDDATE: 'my_date_add', DATE_SUB: 'my_date_sub', SUBDATE: 'my_date_sub', TRUNCATE: 'my_truncate', CHAR_LENGTH: 'length',
-    CHARACTER_LENGTH: 'length', UCASE: 'upper', LCASE: 'lower', TIMESTAMPDIFF: 'my_tsdiff'
+    CHARACTER_LENGTH: 'length', UCASE: 'upper', LCASE: 'lower', TIMESTAMPDIFF: 'my_tsdiff', GREATEST: 'max', LEAST: 'min'
   };
   const FNBACK = { my_left: 'LEFT', my_right: 'RIGHT', iif: 'IF', my_now: 'NOW', my_curdate: 'CURDATE', my_date_add: 'DATE_ADD', my_date_sub: 'DATE_SUB', my_truncate: 'TRUNCATE', my_tsdiff: 'TIMESTAMPDIFF' };
   const IMPL = { int: '0', num: '0', txt: "''", date: "'0000-00-00'" };
@@ -180,6 +181,9 @@
       this.sel = false;
       this.now = opt.now || '2026-11-16 09:00:00';
       this.cat = new Map();
+      this.views = new Map();
+      this.idx = [];
+      this.tx = false;
       this.st = null;
       this.db.run('PRAGMA foreign_keys=ON');
       this.funciones();
@@ -372,9 +376,12 @@
         case 'SHOW': return this.show(c, r, need);
         case 'DESCRIBE': case 'DESC': case 'EXPLAIN': {
           if (c.isW('SELECT')) throw noSup();
-          need(); const t = this.tbl(c.table());
+          need(); const nom = c.table(), vis = this.views.get(lc(nom));
           if (!c.end()) throw this.syn(c.peek());
-          r.type = 'describe'; r.table = t.name; r.out = this.describe(t); r.info = nfilas(r.out.rows.length); return;
+          r.type = 'describe';
+          if (vis) { r.table = vis.name; r.out = { cols: ['Field', 'Type', 'Null', 'Key', 'Default', 'Extra'], rows: this.raw('PRAGMA table_info(' + Q(vis.name) + ')').map(x => [x[1], String(x[2] || '').toLowerCase(), 'YES', '', null, '']) }; }
+          else { const t = this.tbl(nom); r.table = t.name; r.out = this.describe(t); }
+          r.info = nfilas(r.out.rows.length); return;
         }
         case 'SELECT': case 'WITH': case '(':
           r.type = 'select';
@@ -385,18 +392,26 @@
         case 'DELETE': need(); r.type = 'delete'; return this.dml(sig, r);
         case 'CREATE':
           need(); c.eatW('TEMPORARY');
-          if (c.eatW('TABLE')) return this.create(c, r);
           if (c.isW('DATABASE') || c.isW('SCHEMA')) throw acceso();
-          if (c.isW('INDEX') || (c.isW('UNIQUE') && c.isW('INDEX', 1))) { this.db.run(this.emit(sig)); r.type = 'indice'; r.mut = true; r.info = OK0; return; }
+          this.cierraTx(r);
+          if (c.eatW('TABLE')) return this.create(c, r);
+          { const rep = c.eatW('OR', 'REPLACE'); if (c.eatW('VIEW')) return this.createView(c, r, rep); if (rep) throw this.syn(c.peek()); }
+          if (c.isW('INDEX') || (c.isW('UNIQUE') && c.isW('INDEX', 1))) {
+            c.eatW('UNIQUE'); c.i++; const nom = c.ident(); c.needW('ON'); const tb = this.tbl(c.table());
+            const sql = this.emit(sig); this.db.run(sql);
+            this.idx.push({ name: nom, table: lc(tb.name), sql: sql }); r.type = 'indice'; r.table = tb.name; r.mut = true; r.info = OK0 + '\nRecords: 0  Duplicates: 0  Warnings: 0'; return;
+          }
           throw noSup();
-        case 'ALTER': need(); c.needW('TABLE'); return this.alter(c, r);
+        case 'ALTER': need(); c.needW('TABLE'); this.cierraTx(r); return this.alter(c, r);
         case 'DROP':
           need(); c.eatW('TEMPORARY');
-          if (c.eatW('TABLE')) return this.drop(c, r);
           if (c.isW('DATABASE') || c.isW('SCHEMA')) throw acceso();
-          if (c.eatW('INDEX')) { this.db.run('DROP INDEX ' + Q(c.ident())); r.type = 'indice'; r.mut = true; r.info = OK0; return; }
+          this.cierraTx(r);
+          if (c.eatW('TABLE')) return this.drop(c, r);
+          if (c.eatW('VIEW')) return this.dropView(c, r);
+          if (c.eatW('INDEX')) { const nom = c.ident(); this.db.run('DROP INDEX ' + Q(nom)); this.idx = this.idx.filter(x => lc(x.name) !== lc(nom)); r.type = 'indice'; r.mut = true; r.info = OK0; return; }
           throw noSup();
-        case 'TRUNCATE': need(); c.eatW('TABLE'); return this.truncate(c, r);
+        case 'TRUNCATE': need(); c.eatW('TABLE'); this.cierraTx(r); return this.truncate(c, r);
         case 'RENAME': {
           need(); c.needW('TABLE'); const a = c.table(); c.needW('TO'); const b = c.table();
           this.tbl(a); this.renameTable(a, b); r.type = 'alter'; r.table = b; r.mut = true; r.info = OK0; return;
@@ -404,7 +419,16 @@
         case 'SET':
           throw new MyErr(1227, '42000', 'Access denied; you need (at least one of) the SUPER or SYSTEM_VARIABLES_ADMIN privilege(s) for this operation',
             'En este servidor no puedes cambiar variables: el modo seguro lo administra tu jefe.');
-        case 'START': case 'BEGIN': case 'COMMIT': case 'ROLLBACK': case 'GRANT': case 'REVOKE': case 'CALL': case 'LOCK': case 'UNLOCK':
+        case 'START': case 'BEGIN':
+          need(); if (u === 'START') c.needW('TRANSACTION'); else c.eatW('WORK');
+          if (!c.end()) throw this.syn(c.peek());
+          if (this.tx) this.db.run('COMMIT');
+          this.db.run('BEGIN'); this.tx = true; r.type = 'tx'; r.sub = 'start'; r.mut = true; r.info = OK0; return;
+        case 'COMMIT': case 'ROLLBACK':
+          need(); c.eatW('WORK'); if (!c.end()) throw this.syn(c.peek());
+          if (this.tx) this.db.run(u);
+          this.tx = false; r.type = 'tx'; r.sub = u === 'COMMIT' ? 'commit' : 'rollback'; r.mut = true; r.info = OK0; return;
+        case 'GRANT': case 'REVOKE': case 'CALL': case 'LOCK': case 'UNLOCK':
           throw noSup();
         default: throw this.syn(k0);
       }
@@ -429,22 +453,102 @@
         sql = ign ? 'INSERT OR IGNORE ' + this.emit(sig.slice(2)) : this.emit(sig);
       } else {
         r.table = nom(u === 'UPDATE' ? 1 : 2);
-        let dep = 0, w = false;
-        for (const k of sig) { if (k.t === 'op' && k.v === '(') dep++; else if (k.t === 'op' && k.v === ')') dep--; else if (k.t === 'w' && k.u === 'WHERE' && dep === 0) w = true; }
-        if (!w) throw new MyErr(1175, 'HY000', 'You are using safe update mode and you tried to update a table without a WHERE that uses a KEY column.');
-        sql = this.emit(sig);
+        let dep = 0, w = false, j = false;
+        for (const k of sig) { if (k.t === 'op' && k.v === '(') dep++; else if (k.t === 'op' && k.v === ')') dep--; else if (k.t === 'w' && dep === 0 && k.u === 'WHERE') w = true; else if (k.t === 'w' && dep === 0 && k.u === 'JOIN') j = true; }
+        if (!w && !j) throw new MyErr(1175, 'HY000', 'You are using safe update mode and you tried to update a table without a WHERE that uses a KEY column.');
+        sql = u === 'UPDATE' ? this.updJoin(sig, r) : (sig[1] && sig[1].t === 'w' && sig[1].u === 'FROM') ? this.emit(sig) : this.delJoin(sig, r);
       }
       this.db.run(sql);
       const n = this.db.getRowsModified();
       r.mut = true; r.rows = n; r.info = 'Query OK, ' + n + (n === 1 ? ' row' : ' rows') + ' affected';
       if (u === 'UPDATE') r.info += '\nRows matched: ' + n + '  Changed: ' + n + '  Warnings: 0';
     }
+    /* UPDATE de MySQL (con alias, columnas calificadas y JOIN) convertido a UPDATE ... FROM de SQLite. */
+    updJoin(sig, r) {
+      const tope = (pal, desde) => { let dep = 0; for (let i = desde; i < sig.length; i++) { const k = sig[i]; if (k.t === 'op' && k.v === '(') dep++; else if (k.t === 'op' && k.v === ')') dep--; else if (k.t === 'w' && dep === 0 && k.u === pal) return i; } return -1; };
+      const iSet = tope('SET', 1);
+      if (iSet < 2) throw this.syn(sig[1]);
+      let iW = tope('WHERE', iSet); if (iW < 0) iW = sig.length;
+      const partes = []; let cur = [];
+      for (const k of sig.slice(1, iSet)) {
+        if (k.t === 'w' && k.u === 'JOIN') { partes.push(cur); cur = []; }
+        else if (k.t === 'w' && (k.u === 'INNER' || k.u === 'CROSS')) { /* se omite */ }
+        else if (k.t === 'w' && (k.u === 'LEFT' || k.u === 'RIGHT')) throw noSup();
+        else cur.push(k);
+      }
+      partes.push(cur);
+      const ref = seg => {
+        if (!seg.length || seg[0].t === 'op') throw this.syn(seg[0] || sig[iSet]);
+        let i = 1; if (seg[i] && seg[i].t === 'op' && seg[i].v === '.') { seg = seg.slice(2); }
+        if (seg[i] && seg[i].t === 'w' && seg[i].u === 'AS') i++;
+        const al = seg[i] && seg[i].t !== 'op' && seg[i].u !== 'ON' ? seg[i++].v : null;
+        return { t: this.tbl(seg[0].v).name, al: al, rest: seg.slice(i) };
+      };
+      const p0 = ref(partes[0]), froms = [], conds = [];
+      if (p0.rest.length) throw this.syn(p0.rest[0]);
+      r.table = p0.t;
+      partes.slice(1).forEach(s => {
+        const p = ref(s); froms.push(Q(p.t) + (p.al ? ' AS ' + Q(p.al) : ''));
+        if (!p.rest.length || p.rest[0].u !== 'ON') throw this.syn(p.rest[0] || sig[iSet]);
+        conds.push('(' + this.emit(p.rest.slice(1)) + ')');
+      });
+      const set = sig.slice(iSet + 1, iW), nombres = [p0.t, p0.al].filter(Boolean).map(lc), out = [];
+      let dep = 0, inicio = true;
+      for (let i = 0; i < set.length; i++) {
+        const k = set[i];
+        if (inicio && k.t !== 'op' && set[i + 1] && set[i + 1].t === 'op' && set[i + 1].v === '.' && nombres.indexOf(lc(k.v)) >= 0) { i++; inicio = false; continue; }
+        inicio = false;
+        if (k.t === 'op') { if (k.v === '(') dep++; else if (k.v === ')') dep--; else if (k.v === ',' && dep === 0) inicio = true; }
+        out.push(k);
+      }
+      if (iW < sig.length) conds.push('(' + this.emit(sig.slice(iW + 1)) + ')');
+      return 'UPDATE ' + Q(p0.t) + (p0.al ? ' AS ' + Q(p0.al) : '') + ' SET ' + this.emit(out) + (froms.length ? ' FROM ' + froms.join(', ') : '') + (conds.length ? ' WHERE ' + conds.join(' AND ') : '');
+    }
+    /* DELETE alias FROM tabla alias JOIN ... de MySQL convertido a DELETE ... WHERE rowid IN (SELECT ...). */
+    delJoin(sig, r) {
+      const al = sig[1].v;
+      if (!sig[2] || sig[2].u !== 'FROM') throw this.syn(sig[2] || sig[1]);
+      const rest = sig.slice(3); let tabla = null;
+      for (let i = 0; i < rest.length && !tabla; i++) {
+        const k = rest[i]; if (k.t === 'op' || !this.cat.has(lc(k.v))) continue;
+        const nx = rest[i + 1], a = nx && nx.t === 'w' && nx.u === 'AS' ? rest[i + 2] : nx;
+        if (lc(k.v) === lc(al) || (a && a.t !== 'op' && lc(a.v) === lc(al))) tabla = this.cat.get(lc(k.v)).name;
+      }
+      if (!tabla) throw new MyErr(1109, '42S02', "Unknown table '" + al + "' in MULTI DELETE");
+      r.table = tabla;
+      return 'DELETE FROM ' + Q(tabla) + ' WHERE rowid IN (SELECT ' + Q(al) + '.rowid FROM ' + this.emit(rest) + ')';
+    }
+    /* En MySQL una sentencia DDL confirma la transaccion en curso. */
+    cierraTx(r) {
+      if (!this.tx) return;
+      this.db.run('COMMIT'); this.tx = false;
+      r.notes.push('Aviso: en MySQL una sentencia que cambia la estructura confirma (COMMIT) la transacción en curso.');
+    }
+    createView(c, r, rep) {
+      const name = c.table(); c.needW('AS');
+      const cuerpo = c.s.slice(c.i), previa = this.views.get(lc(name));
+      if (!cuerpo.length) throw this.syn(undefined);
+      if (this.cat.has(lc(name)) || (previa && !rep)) throw new MyErr(1050, '42S01', "Table '" + name + "' already exists");
+      const sql = 'CREATE VIEW ' + Q(name) + ' AS ' + this.emit(cuerpo);
+      if (previa) this.db.run('DROP VIEW ' + Q(previa.name));
+      try { this.db.run(sql); const st = this.db.prepare('SELECT * FROM ' + Q(name) + ' LIMIT 0'); st.free(); }
+      catch (e) { try { this.db.run('DROP VIEW IF EXISTS ' + Q(name)); if (previa) this.db.run(previa.sql); } catch (x) { /* nada */ } throw e; }
+      this.views.set(lc(name), { name: name, sql: sql });
+      r.type = 'vista'; r.table = name; r.mut = true; r.info = OK0;
+    }
+    dropView(c, r) {
+      const ifx = c.eatW('IF', 'EXISTS'), name = c.table(), v = this.views.get(lc(name));
+      if (!c.end()) throw this.syn(c.peek());
+      r.type = 'vista'; r.sub = 'drop'; r.table = name; r.info = OK0;
+      if (!v) { if (ifx) { r.info = OK0 + ', 1 warning'; r.notes.push("Note 1051: Unknown table '" + this.dbName + '.' + name + "'"); return; } throw new MyErr(1051, '42S02', "Unknown table '" + this.dbName + '.' + name + "'"); }
+      this.db.run('DROP VIEW ' + Q(v.name)); this.views.delete(lc(name)); r.mut = true;
+    }
     show(c, r, need) {
       r.type = 'show';
       if (c.eatW('DATABASES') || c.eatW('SCHEMAS')) r.out = { cols: ['Database'], rows: [['information_schema'], [this.dbName]] };
       else if (c.eatW('TABLES') || c.eatW('FULL', 'TABLES')) {
         need(); r.sub = 'tables';
-        r.out = { cols: ['Tables_in_' + this.dbName], rows: Array.from(this.cat.values()).map(t => [t.name]).sort((a, b) => a[0] < b[0] ? -1 : 1) };
+        r.out = { cols: ['Tables_in_' + this.dbName], rows: Array.from(this.cat.values()).concat(Array.from(this.views.values())).map(t => [t.name]).sort((a, b) => a[0] < b[0] ? -1 : 1) };
       } else if (c.eatW('COLUMNS') || c.eatW('FIELDS') || c.eatW('FULL', 'COLUMNS')) {
         need(); if (!c.eatW('FROM') && !c.eatW('IN')) throw this.syn(c.peek());
         const t = this.tbl(c.table()); r.type = 'describe'; r.table = t.name; r.out = this.describe(t);
@@ -714,6 +818,7 @@
     }
     rebuild(name, t, map) {
       const d = this.db, tmp = '__sj_nueva';
+      for (const v of this.views.values()) d.run('DROP VIEW IF EXISTS ' + Q(v.name));
       d.run('PRAGMA foreign_keys=OFF'); d.run('BEGIN');
       try {
         d.run(this.gen(t, tmp));
@@ -724,7 +829,11 @@
         if (this.raw('PRAGMA foreign_key_check(' + Q(name) + ')').length) throw new MyErr(1452, '23000', 'Cannot add or update a child row: a foreign key constraint fails');
         d.run('COMMIT');
       } catch (e) { try { d.run('ROLLBACK'); } catch (x) { /* nada */ } throw e; }
-      finally { d.run('PRAGMA foreign_keys=ON'); }
+      finally {
+        d.run('PRAGMA foreign_keys=ON');
+        for (const [k, v] of Array.from(this.views)) { try { d.run(v.sql); const st = d.prepare('SELECT * FROM ' + Q(v.name) + ' LIMIT 0'); st.free(); } catch (x) { try { d.run('DROP VIEW IF EXISTS ' + Q(v.name)); } catch (y) { /* nada */ } this.views.delete(k); } }
+        for (const ix of this.idx.filter(x => x.table === lc(name))) { try { d.run(ix.sql); } catch (x) { this.idx = this.idx.filter(y => y !== ix); } }
+      }
     }
     renameTable(a, b) {
       if (this.cat.has(lc(b))) throw new MyErr(1050, '42S01', "Table '" + b + "' already exists");
@@ -773,7 +882,7 @@
       if (/values? for \d+ columns?|columns? but \d+ values?/.test(m)) return E(1136, '21S01', "Column count doesn't match value count at row 1");
       if ((x = /UNIQUE constraint failed: (\S+?)\.(\S+)/.exec(m))) {
         const t = this.cat.get(lc(x[1])), esPk = t && t.pk && t.pk.some(p => lc(p) === lc(x[2].replace(/,.*/, '')));
-        return E(1062, '23000', "Duplicate entry for key '" + x[1] + '.' + (esPk ? 'PRIMARY' : x[2]) + "'");
+        return E(1062, '23000', "Duplicate entry for key '" + (x[1] === '__sj_nueva' ? r.table : x[1]) + '.' + (esPk ? 'PRIMARY' : x[2]) + "'");
       }
       if ((x = /NOT NULL constraint failed: \S+?\.(\S+)/.exec(m))) return E(1048, '23000', "Column '" + x[1] + "' cannot be null");
       if (/FOREIGN KEY constraint failed/.test(m)) {
@@ -802,6 +911,7 @@
       if ((x = /no such function: (\S+)/.exec(m))) return E(1305, '42000', 'FUNCTION ' + db + '.' + x[1] + ' does not exist');
       if (/misuse of aggregate/.test(m)) return E(1111, 'HY000', 'Invalid use of group function');
       if ((x = /wrong number of arguments to function (\w+)/.exec(m))) return E(1582, '42000', "Incorrect parameter count in the call to native function '" + (FNBACK[x[1]] || x[1].toUpperCase()) + "'");
+      if ((x = /index (\S+) already exists/.exec(m))) return E(1061, '42000', "Duplicate key name '" + x[1] + "'");
       if (/already exists/.test(m)) return E(1050, '42S01', m);
       return E(1105, 'HY000', m);
     }

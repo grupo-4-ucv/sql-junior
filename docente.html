@@ -25,13 +25,17 @@
   </form>
   <form class="px form" id="f-cla" autocomplete="off">
     <h2>Cambiar la clave docente</h2>
-    <p>Escribe la nueva clave, genera su huella y pégala en <code>js/config.js</code>, en la línea <code>HUELLA_CLAVE_DOCENTE</code>. La clave por defecto es DOCENTE-2026. No distingue mayúsculas de minúsculas.</p>
-    <div class="campo"><label class="etq" for="c-cla">Nueva clave</label><input id="c-cla" type="password"></div>
-    <p id="c-res" class="codigo"></p>
-    <button class="btn" type="submit">Generar huella</button>
+    <p>La clave docente sella los reportes y abre el nivel intermedio. No distingue mayúsculas de minúsculas.</p>
+    <p>Escribe la clave actual y la nueva. Obtendrás dos líneas: reemplaza con ellas las líneas del mismo nombre en <code>js/config.js</code> y vuelve a publicar el sitio.</p>
+    <div class="campo"><label class="etq" for="c-act">Clave actual</label><input id="c-act" type="password"></div>
+    <div class="campo"><label class="etq" for="c-cla">Nueva clave (mínimo 8 caracteres)</label><input id="c-cla" type="password"></div>
+    <p id="c-err" class="error"></p>
+    <pre id="c-res" class="nota" style="white-space:pre-wrap;word-break:break-all;font-family:var(--f-codigo);font-size:12px" hidden></pre>
+    <button class="btn" type="submit">Generar líneas</button>
   </form>
 </div></div>
 <script src="js/config.js"></script>
+<script src="js/cripto.js"></script>
 <script>
 (function () {
   var $ = function (s) { return document.querySelector(s); };
@@ -47,8 +51,14 @@
   };
   $('#f-cla').onsubmit = function (e) {
     e.preventDefault();
-    var c = $('#c-cla').value.trim();
-    $('#c-res').textContent = c.length < 6 ? 'Usa al menos 6 caracteres.' : "HUELLA_CLAVE_DOCENTE: '" + SJ.huellaClave(c) + "',";
+    var act = $('#c-act').value, c = $('#c-cla').value.trim(), er = $('#c-err'), res = $('#c-res');
+    res.hidden = true; er.textContent = '';
+    if (SJ.huellaClave(act) !== SJ.CFG.HUELLA_CLAVE_DOCENTE) { er.textContent = 'La clave actual no es correcta.'; return; }
+    if (c.length < 8) { er.textContent = 'La nueva clave debe tener al menos 8 caracteres.'; return; }
+    if (!SJ.Cripto.disponible()) { er.textContent = 'Este navegador no permite generar la llave. Abre esta página en Chrome, Edge o Firefox actualizados.'; return; }
+    SJ.Cripto.desenvolver(act).then(function (llave) { return SJ.Cripto.envolver(llave, c); }).then(function (env) {
+      res.textContent = "HUELLA_CLAVE_DOCENTE: '" + SJ.huellaClave(c) + "',\nLLAVE_INTERMEDIO: '" + env + "',"; res.hidden = false;
+    }).catch(function () { er.textContent = 'No se pudo generar la llave con la clave actual.'; });
   };
 })();
 </script>

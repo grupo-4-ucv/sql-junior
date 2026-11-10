@@ -4,6 +4,13 @@
   const SJ = root.SJ = root.SJ || {};
   SJ.escenarios = SJ.escenarios || {};
   SJ.ORDEN_ESCENARIOS = ['autoandes', 'mercapixel', 'novatel'];
+  /* Nivel intermedio (mejora de contrato): se desbloquea al aprobar y sellar las tres empresas junior. */
+  SJ.INTERMEDIO = [
+    { id: 'kallpa', nombre: 'Kallpa Finanzas', rubro: 'Banca digital', puesto: 'Analista de Riesgo Crediticio', resumen: 'Créditos, cuentas y morosidad. Cada decisión de riesgo sale de tus consultas.' },
+    { id: 'pachasalud', nombre: 'PachaSalud', rubro: 'Red de clínicas', puesto: 'Analista de Información Clínica', resumen: 'Citas, médicos, seguros y farmacia en seis sedes. Los datos deben cuadrar al centavo.' },
+    { id: 'rutanorte', nombre: 'RutaNorte', rubro: 'Transporte y logística', puesto: 'Analista de Operaciones', resumen: 'Flota, rutas, choferes y entregas en todo el norte del país. El tiempo es dinero.' }
+  ];
+  SJ.ascensoListo = S => SJ.ORDEN_ESCENARIOS.every(id => S.hechas[id] && S.hechas[id].pct > SJ.CFG.APROBACION);
 
   /* ---------- comparacion de resultados ---------- */
   const norma = v => v == null ? '\u0000' : typeof v === 'number' ? 'n' + (+v.toFixed(4)) : 's' + String(v);
@@ -42,13 +49,13 @@
   };
 
   /* ---------- puntaje de un reto ---------- */
-  SJ.puntua = function (st, fallos, pistas, omitido) {
+  SJ.puntua = function (st, fallos, pistas, omitido, descPista) {
     const C = SJ.CFG;
     if (omitido) return { p: 0, res: 0, prac: 0, pen: 0 };
     const res = Math.max(0, C.PUNTOS_RESULTADO - Math.min(C.MAX_DESCUENTO_FALLO, fallos * C.DESCUENTO_FALLO));
     const tot = st.length, malas = st.filter(s => s.l.length).length;
     const prac = Math.round(C.PUNTOS_PRACTICAS * (tot ? 1 - malas / tot : 1));
-    const pen = pistas * C.DESCUENTO_PISTA;
+    const pen = pistas * (descPista || C.DESCUENTO_PISTA);
     return { p: Math.max(0, Math.round(res + prac - pen)), res: res, prac: prac, pen: pen };
   };
 
@@ -72,6 +79,8 @@
         filas: (s, p) => E.raw(s, p),
         T: n => E.cat.get(lc(n)) || null,
         nTablas: () => E.cat.size,
+        vista: n => E.views.get(lc(n)) || null,
+        igual: (a, b, orden) => { try { return SJ.compara(E.quiet(b), E.quiet(a), orden).ok; } catch (e) { return false; } },
         col: (t, c) => { const x = E.cat.get(lc(t)); return x ? x.cols.find(k => lc(k.name) === lc(c)) || null : null; }
       };
     }
@@ -102,6 +111,7 @@
     }
     evalua() {
       const R = this.reto;
+      if (this.E.tx) return { ok: false, sinIntento: true, msgs: ['Tienes una transacción abierta. Confírmala con COMMIT o deshazla con ROLLBACK antes de entregar.'] };
       if (R.ref) {
         if (!this.ult) return { ok: false, sinIntento: true, msgs: ['Primero ejecuta la consulta que responde la solicitud. Se evalúa tu último SELECT.'] };
         return SJ.compara(this.E.quiet(R.ref(this.f)), this.ult, R.orden);

@@ -110,5 +110,9 @@
     return out;
   };
   D.DIAS = [['Lunes', '2026-11-16', 25], ['Martes', '2026-11-17', 30], ['Miércoles', '2026-11-18', 35], ['Jueves', '2026-11-19', 45], ['Viernes', '2026-11-20', 45]];
+  D.DIAS2 = [['Lunes 1', '2026-11-23', 40], ['Martes 1', '2026-11-24', 40], ['Miércoles 1', '2026-11-25', 45], ['Jueves 1', '2026-11-26', 45], ['Viernes 1', '2026-11-27', 45],
+    ['Lunes 2', '2026-11-30', 40], ['Martes 2', '2026-12-01', 45], ['Miércoles 2', '2026-12-02', 45], ['Jueves 2', '2026-12-03', 45], ['Viernes 2', '2026-12-04', 45]];
+  D.semana2 = retosPorDia => D.DIAS2.map((d, i) => ({ nombre: d[0], fecha: d[1], min: d[2], retos: retosPorDia[i] }));
+  D.masMeses = (iso, n) => { let y = +iso.slice(0, 4), m = +iso.slice(5, 7) - 1 + n; const d = Math.min(+iso.slice(8, 10), 28); y += Math.floor(m / 12); m = ((m % 12) + 12) % 12; return y + '-' + (m < 9 ? '0' : '') + (m + 1) + '-' + (d < 10 ? '0' : '') + d; };
   D.semana = retosPorDia => D.DIAS.map((d, i) => ({ nombre: d[0], fecha: d[1], min: d[2], retos: retosPorDia[i] }));
 })(typeof window !== 'undefined' ? window : global);

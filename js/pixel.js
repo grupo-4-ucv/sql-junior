@@ -5,7 +5,10 @@
   const TEMA = {
     autoandes: { pared: '#39425f', acento: '#ff7a45', edificio: '#55476b', letrero: 'AUTOANDES' },
     mercapixel: { pared: '#3d3463', acento: '#c77dff', edificio: '#3f5a7a', letrero: 'MERCAPIXEL' },
-    novatel: { pared: '#2b4459', acento: '#35c9d6', edificio: '#4a4f73', letrero: 'NOVATEL' }
+    novatel: { pared: '#2b4459', acento: '#35c9d6', edificio: '#4a4f73', letrero: 'NOVATEL' },
+    kallpa: { pared: '#2f4a3f', acento: '#7ddc7a', edificio: '#3c5a52', letrero: 'KALLPA' },
+    pachasalud: { pared: '#4a3550', acento: '#ff8fb1', edificio: '#5a4a6b', letrero: 'PACHASALUD' },
+    rutanorte: { pared: '#4a4030', acento: '#f6c544', edificio: '#5b5140', letrero: 'RUTANORTE' }
   };
   const F = {
     A: '010101111101101', B: '110101110101110', C: '011100100100011', D: '110101101101110', E: '111100110100111', F: '111100110100100', G: '011100101101011',
@@ -37,7 +40,9 @@
   const auto = (c, x, y, col) => { R(c, x + 4, y, 10, 4, col); R(c, x, y + 3, 20, 5, col); R(c, x + 6, y + 1, 3, 2, '#bfe6ff'); R(c, x + 10, y + 1, 3, 2, '#bfe6ff'); R(c, x + 3, y + 7, 4, 3, '#0a0d18'); R(c, x + 13, y + 7, 4, 3, '#0a0d18'); R(c, x + 19, y + 4, 1, 2, '#ffe9a0'); };
   const cajas = (c, x, y, col) => { R(c, x, y + 6, 9, 8, '#c9955a'); R(c, x + 10, y + 6, 9, 8, '#b98248'); R(c, x + 5, y - 2, 9, 8, '#d7a66b'); R(c, x + 4, y + 6, 1, 8, col); R(c, x + 14, y + 6, 1, 8, col); R(c, x + 9, y - 2, 1, 8, col); };
   const antena = (c, x, y, col, enc) => { R(c, x + 4, y, 1, 22, '#c9c9d6'); for (let k = 0; k < 5; k++) { R(c, x + 4 - k, y + 4 + k * 4, 1, 4, '#8e94b8'); R(c, x + 4 + k, y + 4 + k * 4, 1, 4, '#8e94b8'); R(c, x + 4 - k, y + 7 + k * 4, k * 2 + 1, 1, '#8e94b8'); } R(c, x + 3, y - 2, 3, 2, enc ? '#ff5d5d' : col); R(c, x, y + 2, 3, 1, col); R(c, x + 6, y + 2, 3, 1, col); };
-  const emblema = (c, id, x, y, t, enc) => { if (id === 'autoandes') auto(c, x, y + 10, t.acento); else if (id === 'mercapixel') cajas(c, x, y + 6, t.acento); else antena(c, x + 5, y - 2, t.acento, enc); };
+  const monedas = (c, x, y) => { for (let k = 0; k < 4; k++) { R(c, x + 2, y + 16 - k * 4, 12, 3, '#f6c544'); R(c, x + 2, y + 18 - k * 4, 12, 1, '#c99a2e'); } R(c, x + 6, y + 1, 4, 2, '#ffe9a0'); };
+  const cruz = (c, x, y, col) => { R(c, x + 2, y + 4, 16, 16, '#ffffff'); R(c, x + 8, y + 6, 4, 12, col); R(c, x + 4, y + 10, 12, 4, col); };
+  const emblema = (c, id, x, y, t, enc) => { if (id === 'autoandes' || id === 'rutanorte') auto(c, x, y + 10, t.acento); else if (id === 'mercapixel') cajas(c, x, y + 6, t.acento); else if (id === 'kallpa') monedas(c, x + 3, y); else if (id === 'pachasalud') cruz(c, x, y - 2, '#ff5d7a'); else antena(c, x + 5, y - 2, t.acento, enc); };
 
   /* Portada: ciudad de noche y una consulta en la terminal. */
   Pix.portada = function (cv) {
@@ -84,7 +89,7 @@
   };
 
   /* Oficina: la ventana cambia con el avance del dia y el calendario muestra la fecha. */
-  Pix.escena = function (cv, id, d, avance) {
+  Pix.escena = function (cv, id, d, avance, fecha) {
     const c = lienzo(cv), t = TEMA[id] || TEMA.autoandes, rnd = azar(id + d), p = Math.max(0, Math.min(1, avance || 0));
     R(c, 0, 0, 200, 58, t.pared); for (let x = 0; x < 200; x += 16) R(c, x, 0, 1, 58, 'rgba(0,0,0,.12)');
     R(c, 0, 56, 200, 2, '#0a0d18'); R(c, 0, 58, 200, 14, '#1b2136'); for (let x = 0; x < 200; x += 20) R(c, x, 58, 1, 14, '#141a2c');
@@ -96,7 +101,7 @@
     R(c, 8, 38, 74, 6, '#4a4f63'); emblema(c, id, 46, 14, t, d % 2 === 0);
     R(c, 44, 8, 2, 36, '#0a0d18'); R(c, 8, 25, 74, 2, '#0a0d18'); R(c, 4, 46, 82, 3, '#c9c9d6');
     R(c, 92, 8, 48, 11, t.acento); R(c, 92, 19, 48, 1, '#0a0d18'); texto(c, t.letrero, 94 + Math.max(0, Math.floor((44 - t.letrero.length * 4) / 2)), 11, '#1d1020');
-    R(c, 150, 6, 22, 24, '#f1e7c9'); R(c, 150, 6, 22, 6, '#ff6f6f'); texto(c, String(16 + d), 157, 16, '#2b2334'); texto(c, 'NOV', 155, 23, '#8a7a5a');
+    R(c, 150, 6, 22, 24, '#f1e7c9'); R(c, 150, 6, 22, 6, '#ff6f6f'); texto(c, fecha ? fecha.slice(8, 10) : String(16 + d), 157, 16, '#2b2334'); texto(c, fecha && fecha.slice(5, 7) === '12' ? 'DIC' : 'NOV', 155, 23, '#8a7a5a');
     R(c, 180, 8, 12, 12, '#0a0d18'); R(c, 181, 9, 10, 10, '#f1e7c9'); R(c, 186, 11, 1, 4, '#2b2334'); R(c, 186, 14, 3 - Math.floor(p * 2), 1, '#2b2334');
     R(c, 96, 44, 98, 4, '#8a5a34'); R(c, 96, 48, 98, 1, '#5d3b20'); R(c, 100, 48, 4, 10, '#5d3b20'); R(c, 186, 48, 4, 10, '#5d3b20');
     R(c, 124, 22, 40, 20, '#0a0d18'); R(c, 126, 24, 36, 15, '#0d2118'); R(c, 141, 42, 6, 2, '#0a0d18');
@@ -106,6 +111,24 @@
     R(c, 172, 37, 7, 7, t.acento); R(c, 179, 39, 2, 3, t.acento); R(c, 174, 33 + (d % 2), 1, 2, '#e9edff'); R(c, 176, 34 - (d % 2), 1, 2, '#e9edff');
     R(c, 139, 48, 14, 12, '#2a3558'); R(c, 137, 60, 18, 2, '#0a0d18'); R(c, 142, 36, 8, 8, '#2b1c12'); R(c, 140, 44, 12, 6, '#e9edff');
     R(c, 86, 50, 9, 8, '#a8553a'); R(c, 88, 42, 2, 8, '#3f9d5d'); R(c, 85, 44, 3, 3, '#62d68d'); R(c, 91, 40, 3, 4, '#62d68d'); R(c, 89, 38, 2, 3, '#3f9d5d');
+  };
+
+  /* Candado dorado en (x, y), de 14 x 18 pixeles. */
+  const candado = (c, x, y) => {
+    R(c, x + 3, y, 8, 2, '#c9c9d6'); R(c, x + 1, y + 1, 3, 7, '#c9c9d6'); R(c, x + 10, y + 1, 3, 7, '#c9c9d6'); R(c, x + 2, y + 1, 1, 6, '#8e94b8');
+    R(c, x - 1, y + 7, 16, 12, '#0a0d18'); R(c, x, y + 8, 14, 10, '#f6c544'); R(c, x, y + 8, 14, 2, '#ffe9a0'); R(c, x, y + 16, 14, 2, '#c99a2e');
+    R(c, x + 6, y + 11, 2, 3, '#1d1020'); R(c, x + 5, y + 11, 4, 2, '#1d1020');
+  };
+  Pix.candado = function (cv) { const c = lienzo(cv); R(c, 0, 0, 32, 32, '#2a3558'); candado(c, 9, 5); };
+  /* Fachada en gris con candado para las empresas del nivel intermedio. */
+  Pix.bloqueada = function (cv, id) {
+    const c = lienzo(cv), rnd = azar(id), nom = { kallpa: 'KALLPA', pachasalud: 'PACHASALUD', rutanorte: 'RUTANORTE' }[id] || '';
+    R(c, 0, 0, 96, 44, '#3a4160'); R(c, 0, 44, 96, 12, '#2b2f3f');
+    R(c, 14, 8, 68, 36, '#4a4f63'); R(c, 12, 6, 72, 3, '#0a0d18'); R(c, 16, 11, 64, 8, '#5d6380');
+    texto(c, nom, 18 + Math.max(0, Math.floor((60 - nom.length * 4) / 2)), 13, '#9ea9d3');
+    for (let y = 23; y < 40; y += 6) for (let x = 18; x < 78; x += 7) R(c, x, y, 4, 4, rnd() < 0.2 ? '#6b7088' : '#33384d');
+    R(c, 0, 0, 96, 56, 'rgba(10,13,24,.35)');
+    candado(c, 41, 18);
   };
 
   /* Taza de cafe para el descanso. */

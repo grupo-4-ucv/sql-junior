@@ -52,7 +52,8 @@
     $('#cl-no', v).onclick = UI.cerrar;
     $('#cl-form', v).onsubmit = function (e) {
       e.preventDefault();
-      if (SJ.huellaClave($('#cl-in', v).value) === CFG.HUELLA_CLAVE_DOCENTE) { UI.cerrar(); alAcertar(); }
+      const cl = $('#cl-in', v).value;
+      if (SJ.huellaClave(cl) === CFG.HUELLA_CLAVE_DOCENTE) { UI.cerrar(); alAcertar(cl); }
       else $('#cl-err', v).textContent = 'Clave incorrecta. Llama a tu docente.';
     };
   };
@@ -70,7 +71,7 @@
         '<div class="campo"><label class="etq" for="in-ape">Apellidos</label><input id="in-ape" class="libre" maxlength="40" autocomplete="off" spellcheck="false"></div>' +
         '<p class="error" id="in-err"></p><button class="btn" type="submit">Comenzar</button></form>';
     UI.pinta('<div class="centro"><div class="portada px"><canvas id="in-arte" width="120" height="44" style="width:min(100%,480px)"></canvas>' +
-      '<h1>SQL JUNIOR</h1><p class="sub">Tu primera semana en el equipo de datos.<br>Cinco días, una base real y solicitudes que no esperan.</p></div>' + ficha +
+      '<h1>SQL JUNIOR</h1><p class="sub">Tu primera semana en el equipo de datos.<br>Cinco días, una base real y solicitudes que no esperan.</p>' + SJ.Son.boton() + '</div>' + ficha +
       '<p class="tenue" style="text-align:center">Simulador de MySQL para el curso de Bases de Datos. Se juega mejor en computadora, con teclado.</p></div>');
     if (SJ.Pix) SJ.Pix.portada($('#in-arte'));
     if (al) {
@@ -100,6 +101,11 @@
     if (!S.al) return UI.inicio();
     if (!S.normas) return UI.normas(true);
     if (!S.g) return UI.empresas();
+    if (!SJ.escenarios[S.g.esc]) {
+      const v = UI.ventana('<h2>Nivel intermedio protegido</h2><p>Tu partida en curso es del nivel intermedio. Para continuarla en este navegador, tu docente debe ingresar su clave.</p><div class="fila"><button class="btn" id="rt-ok" data-foco>Ingresar clave</button></div>');
+      $('#rt-ok', v).onclick = function () { UI.pideClave('Continuar el nivel intermedio', 'La clave del docente abre el contenido del nivel intermedio.', function (cl) { SJ.Cripto.abrir(cl).then(ck => { S.llave = ck; UI.guardar(); SJ.Juego.abrir(); }).catch(() => UI.aviso('No se pudo abrir el nivel intermedio en este navegador.')); }); };
+      return;
+    }
     SJ.Juego.abrir();
   };
 
@@ -132,10 +138,24 @@
       return '<button class="empresa px" data-esc="' + id + '"' + (h ? ' disabled' : '') + '><canvas width="96" height="56"></canvas><h2>' + esc(e.nombre) + '</h2>' +
         '<p>' + esc(e.resumen) + '</p><span class="chip">' + (h ? 'COMPLETADA <b>' + h.pct + '%</b>' : esc(e.rubro)) + '</span></button>';
     }).join('');
-    UI.pinta('<div class="centro" style="max-width:980px"><div class="px form"><h2>' + (libres.length ? 'Elige dónde vas a trabajar' : 'Completaste las tres empresas') + '</h2>' +
+    const listo = SJ.ascensoListo(S), aprob = ids.filter(id => S.hechas[id]).length;
+    const inter = SJ.INTERMEDIO.map(function (e) {
+      const h = S.hechas[e.id], disp = listo && !!SJ.escenarios[e.id], cif = !!SJ.cifrados[e.id];
+      return '<button class="empresa px' + (disp || h ? '' : ' bloqueada') + '" data-int="' + e.id + '"' + (h ? ' disabled' : '') + '><canvas width="96" height="56"></canvas><h2>' + esc(e.nombre) + '</h2>' +
+        '<p class="etq">' + esc(e.puesto) + '</p><p>' + esc(e.resumen) + '</p><span class="chip">' + (h ? 'COMPLETADA <b>' + h.pct + '%</b>' : !listo ? 'BLOQUEADO' : disp ? 'DISPONIBLE: 50 SOLICITUDES' : cif ? 'REQUIERE CLAVE DOCENTE' : 'PRÓXIMAMENTE') + '</span></button>';
+    }).join('');
+    UI.pinta('<div class="centro" style="max-width:980px"><div class="px form"><div class="fila"><h2>' + (libres.length ? 'Elige dónde vas a trabajar' : 'Completaste las tres empresas') + '</h2><span class="sep"></span>' + SJ.Son.boton() + '</div>' +
       '<p>' + (libres.length ? 'Solo puedes elegir una empresa. Para pasar a otra debes terminar la semana, presentar tu reporte al docente y superar el ' + CFG.APROBACION + '%.'
-        : 'Terminaste todas las simulaciones. Buen trabajo, ' + esc(S.al.nom.split(' ')[0]) + '.') + '</p></div><div class="empresas">' + tarjetas + '</div></div>');
-    document.querySelectorAll('.empresa').forEach(function (b) {
+        : 'Terminaste todas las simulaciones. Buen trabajo, ' + esc(S.al.nom.split(' ')[0]) + '.') + '</p></div><div class="empresas">' + tarjetas + '</div>' +
+      '<div class="px form"><div class="fila"><h2 class="oro">Mejora de contrato: nivel intermedio</h2><span class="sep"></span><span class="chip">Empresas aprobadas <b>' + aprob + ' / 3</b></span></div>' +
+      '<p>Aprueba las tres empresas para recibir la oferta de ascenso: un nuevo puesto, 50 solicitudes por empresa y comandos de nivel intermedio.</p></div>' +
+      '<div class="empresas">' + inter + '</div></div>');
+    document.querySelectorAll('.empresa[data-int]').forEach(function (b) {
+      const e = SJ.INTERMEDIO.find(x => x.id === b.dataset.int);
+      if (SJ.Pix) { if (b.classList.contains('bloqueada')) SJ.Pix.bloqueada(b.querySelector('canvas'), e.id); else SJ.Pix.fachada(b.querySelector('canvas'), e.id); }
+      b.onclick = function () { UI.candado(e); };
+    });
+    document.querySelectorAll('.empresa[data-esc]').forEach(function (b) {
       const id = b.dataset.esc, e = SJ.escenarios[id];
       if (SJ.Pix) SJ.Pix.fachada(b.querySelector('canvas'), id);
       b.onclick = function () {
@@ -143,6 +163,42 @@
           'Firmar contrato', function () { SJ.Juego.nueva(id, 1); });
       };
     });
+  };
+
+  /* ---------- candado del nivel intermedio ---------- */
+  UI.candado = function (e) {
+    const S = UI.S;
+    if (!SJ.ascensoListo(S)) {
+      SJ.Son.tocar('candado');
+      const lista = SJ.ORDEN_ESCENARIOS.map(function (id) {
+        const h = S.hechas[id];
+        return '<tr><td>' + esc(SJ.escenarios[id].nombre) + '</td><td class="' + (h ? 'txt-ok' : 'txt-mal') + '">' + (h ? 'Superada (' + h.pct + '%)' : 'Pendiente') + '</td></tr>';
+      }).join('');
+      const v = UI.ventana('<div class="dialogo"><canvas id="cd-arte" width="32" height="32" style="width:96px;height:96px"></canvas><div style="display:grid;gap:10px">' +
+        '<h2>Reto intermedio bloqueado</h2><p>Para desarrollar el reto intermedio en <b>' + esc(e.nombre) + '</b>, debes superar los 3 casos del nivel junior: terminar la semana, presentar el reporte a tu docente y obtener más del ' + CFG.APROBACION + '% en cada empresa.</p></div></div>' +
+        '<table class="dias"><thead><tr><th>Empresa junior</th><th>Estado</th></tr></thead><tbody>' + lista + '</tbody></table>' +
+        '<div class="fila"><button class="btn" id="cd-ok" data-foco>Entendido</button></div>');
+      if (SJ.Pix) SJ.Pix.candado($('#cd-arte', v));
+      $('#cd-ok', v).onclick = UI.cerrar;
+      return;
+    }
+    const E2 = SJ.escenarios[e.id];
+    if (E2) {
+      return UI.confirma('Mejora de contrato en ' + E2.nombre, 'Te ofrecen el puesto de <b>' + esc(E2.puesto) + '</b>: dos semanas de trabajo, ' + E2.dias.reduce((a, d) => a + d.retos.length, 0) +
+        ' solicitudes, una sola pista por día y comandos de nivel intermedio. No podrás cambiar de empresa hasta terminar. ¿Firmas?', 'Firmar contrato', function () { SJ.Juego.nueva(e.id, 1); });
+    }
+    if (SJ.cifrados[e.id]) {
+      if (!SJ.Cripto.disponible()) { UI.aviso('Este navegador no puede abrir el nivel intermedio. Usa una versión reciente de Chrome, Edge o Firefox.'); return; }
+      return UI.pideClave('Habilitar el nivel intermedio', 'Superaste las tres empresas del nivel junior. Tu docente confirma el ascenso con su clave.', function (cl) {
+        SJ.Cripto.abrir(cl).then(function (ck) { S.llave = ck; UI.guardar(); SJ.Son.tocar('aprobado'); UI.empresas(); })
+          .catch(function () { UI.aviso('No se pudo abrir el nivel intermedio en este navegador.'); });
+      });
+    }
+    SJ.Son.tocar('aprobado');
+    const v = UI.ventana('<h2>Mejora de contrato aprobada</h2><p>Superaste las tres empresas del nivel junior. Tu ascenso a <b>' + esc(e.puesto) + '</b> en ' + esc(e.nombre) +
+      ' está confirmado.</p><p>Las empresas de nivel intermedio se habilitarán en la próxima actualización del simulador. Avisa a tu docente que ya estás listo.</p>' +
+      '<div class="fila"><button class="btn" id="cd-ok" data-foco>Entendido</button></div>');
+    $('#cd-ok', v).onclick = UI.cerrar;
   };
 
   /* ---------- descanso de 15 minutos ---------- */
@@ -163,12 +219,13 @@
     const v = UI.ventana('<div class="descanso" style="display:grid;gap:14px"><h2>Descanso</h2><canvas id="ds-arte" width="32" height="32" style="width:128px;height:128px"></canvas>' +
       '<div class="reloj" id="ds-reloj">15:00</div><p id="ds-txt">Estira las piernas y toma agua. La base de datos te espera tal como la dejaste.</p>' +
       '<button class="btn" id="ds-fin">Volver al trabajo</button></div>');
-    let cuadro = 0;
+    let cuadro = 0, sonado = false;
     const pinta = function () {
       const resta = (g.desc.fin - Date.now()) / 1000, r = $('#ds-reloj');
       if (!r) { clearInterval(relojDescanso); return; }
       r.textContent = UI.tiempo(resta);
       if (SJ.Pix) SJ.Pix.cafe($('#ds-arte'), cuadro++);
+      if (resta <= 0 && !sonado) { sonado = true; SJ.Son.tocar('alarma'); }
       if (resta <= 0) { $('#ds-txt').textContent = 'Se terminó el descanso. De vuelta a tu puesto.'; r.classList.add('txt-mal'); }
     };
     clearInterval(relojDescanso);
@@ -220,9 +277,12 @@
     if (!window.initSqlJs) { UI.pinta('<div class="centro"><div class="px form"><h2>Falta el motor SQL</h2><p>No se cargó el archivo vendor/sql-asm.js.</p></div></div>'); return; }
     window.initSqlJs().then(function (SQL) {
       SJ.SQL = SQL;
-      UI.inicio();
-      const g = UI.S.g;
-      if (g && g.desc && g.desc.fin > Date.now()) { SJ.Juego.abrir(); UI.muestraDescanso(); }
+      const sigue = function () {
+        UI.inicio();
+        const g = UI.S.g;
+        if (g && g.desc && g.desc.fin > Date.now() && SJ.escenarios[g.esc]) { SJ.Juego.abrir(); UI.muestraDescanso(); }
+      };
+      if (UI.S.llave && SJ.Cripto.disponible()) SJ.Cripto.cargar(UI.S.llave).then(sigue, sigue); else sigue();
     }).catch(function (e) {
       UI.pinta('<div class="centro"><div class="px form"><h2>No se pudo iniciar el motor SQL</h2><p>' + esc(e && e.message || e) + '</p></div></div>');
     });

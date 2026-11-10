@@ -14,6 +14,9 @@
     PUNTOS_RESULTADO: 80,
     PUNTOS_PRACTICAS: 20,
     DESCANSO_SEGUNDOS: 15 * 60,
+    // Llave del contenido intermedio, protegida con la clave docente. Se regenera con docente.html al cambiar la clave.
+    LLAVE_INTERMEDIO: '4TVgy1xsm26+HuJ8oGQC6vYt6huq89B1ZDgSSki9zbINCOofwwHp+Lqn5HD9fBW36zwJT4oCJ+sSn0Ml',
+    SONIDO_INICIAL: true,      // false: el sonido arranca apagado en cada computadora
     REQUIERE_CLAVE_DOCENTE: true,
     // Huella de la clave docente. Para cambiarla abre docente.html, genera la huella y pegala aqui.
     HUELLA_CLAVE_DOCENTE: 'ZX1123G8JD',

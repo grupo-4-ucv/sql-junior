@@ -1,4 +1,7 @@
 // Recorrido completo en un navegador real: node tests/navegador.js [empresa] [carpeta_capturas]
+// La clave docente se toma de la variable de entorno SJ_CLAVE.
+const CLAVE = process.env.SJ_CLAVE || '';
+if (!CLAVE) { console.error('Define SJ_CLAVE con la clave docente para ejecutar esta prueba.'); process.exit(1); }
 const http = require('http'), fs = require('fs'), path = require('path');
 const { chromium } = require('playwright');
 const RAIZ = path.join(__dirname, '..'), EMP = process.argv[2] || 'autoandes', OUT = process.argv[3] || path.join(RAIZ, 'tests', 'capturas');
@@ -56,7 +59,7 @@ const srv = http.createServer((q, r) => {
     await pg.click('#fd-ok');
   }
   await pg.waitForSelector('.rep-pct'); await foto('12-reporte');
-  await pg.click('#rp-sello'); await pg.type('#cl-in', 'DOCENTE-2026'); await pg.click('#cl-form button[type=submit]');
+  await pg.click('#rp-sello'); await pg.type('#cl-in', CLAVE); await pg.click('#cl-form button[type=submit]');
   await pg.waitForSelector('.sello'); await pg.screenshot({ path: path.join(OUT, '13-reporte-sellado.png'), fullPage: true });
   const pct = await pg.textContent('.rep-pct');
   const puedeSeguir = !!(await pg.$('#rp-otra'));

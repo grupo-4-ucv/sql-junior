@@ -16,7 +16,9 @@
 
   SJ.HABILIDADES = {
     explorar: 'Explorar la base', select: 'SELECT básico', filtros: 'Filtros', funciones: 'Funciones de texto y fecha',
-    dml: 'INSERT, UPDATE, DELETE', ddl: 'Estructura (DDL)', agregacion: 'Agregación', join: 'JOIN'
+    dml: 'INSERT, UPDATE, DELETE', ddl: 'Estructura (DDL)', agregacion: 'Agregación', join: 'JOIN',
+    logica: 'CASE y lógica condicional', subconsulta: 'Subconsultas', conjuntos: 'UNION y autouniones', ventana: 'Funciones de ventana',
+    vistas: 'Vistas', dmlav: 'Cambios masivos', transaccion: 'Transacciones', integridad: 'Restricciones e índices', reporte: 'Reportes integradores'
   };
 
   /* Cada charla: dia (0 = lunes), en (indice del reto antes del cual aparece), titulo, dice (lineas del jefe) y notas para la libreta.

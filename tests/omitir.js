@@ -1,4 +1,7 @@
 // Omitir, restaurar, clave incorrecta y repetir la semana en el navegador: node tests/omitir.js
+// La clave docente se toma de la variable de entorno SJ_CLAVE.
+const CLAVE = process.env.SJ_CLAVE || '';
+if (!CLAVE) { console.error('Define SJ_CLAVE con la clave docente para ejecutar esta prueba.'); process.exit(1); }
 const http = require('http'), fs = require('fs'), path = require('path');
 const { chromium } = require('playwright');
 const RAIZ = path.join(__dirname, '..');
@@ -34,7 +37,7 @@ const srv = http.createServer((q, r) => { const f = path.join(RAIZ, q.url === '/
   }
   await pg.waitForSelector('.rep-pct'); notas.push('puntaje: ' + await pg.textContent('.rep-pct'));
   await pg.click('#rp-sello'); await pg.type('#cl-in', 'clave-mala'); await pg.click('#cl-form button[type=submit]'); notas.push('clave mala: ' + await pg.textContent('#cl-err'));
-  await pg.fill('#cl-in', ''); await pg.type('#cl-in', 'docente-2026'); await pg.click('#cl-form button[type=submit]'); await pg.waitForSelector('.sello');
+  await pg.fill('#cl-in', ''); await pg.type('#cl-in', CLAVE); await pg.click('#cl-form button[type=submit]'); await pg.waitForSelector('.sello');
   notas.push('puede elegir otra: ' + !!(await pg.$('#rp-otra')) + ', puede repetir: ' + !!(await pg.$('#rp-rep')));
   const f1 = await pg.evaluate(() => new SJ.Sim(SJ.SQL, SJ.escenarios.novatel, 'OMITE01|novatel|1').f.x1.dni);
   await pg.click('#rp-rep'); await pg.click('#cf-si'); await pg.waitForSelector('#ch-sig');

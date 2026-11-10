@@ -104,3 +104,47 @@ init().then(SQL => {
   r = E.exec('SELECT precio/2, LEFT(nombre,2), COUNT(*) FROM productos;')[0]; console.log(r.out.cols);
   console.log(fallos ? 'FALLOS: ' + fallos : 'MOTOR OK');
 });
+// ---- nivel intermedio: vistas, transacciones, UPDATE/DELETE con JOIN, indices, ventanas ----
+init().then(SQL => {
+  const E = new SJ.Engine(SQL, { db: 'banco' }); E.sel = true; let f = 0;
+  const run = (sql, esp) => { const rs = E.exec(sql), r = rs[rs.length - 1]; const got = r.ok ? (r.out ? JSON.stringify(r.out.rows) : r.info.split('\n')[0]) : String(r.err.code); if (esp !== undefined && got !== String(esp)) { f++; console.log('FALLO:', sql, '\n   obtuvo:', got, r.ok ? '' : r.err.texto, '\n   esperaba:', esp); } return r; };
+  run('CREATE TABLE cli (id INT AUTO_INCREMENT PRIMARY KEY, nom VARCHAR(20), seg CHAR(1));');
+  run('CREATE TABLE cta (id INT AUTO_INCREMENT PRIMARY KEY, id_cli INT NOT NULL, saldo DECIMAL(10,2), estado VARCHAR(10), FOREIGN KEY (id_cli) REFERENCES cli(id));');
+  run("INSERT INTO cli (nom, seg) VALUES ('Ana', 'A'), ('Luis', 'B'), ('Rosa', 'C');");
+  run("INSERT INTO cta (id_cli, saldo, estado) VALUES (1, 100, 'ACTIVA'), (1, 50, 'ACTIVA'), (2, 300, 'ACTIVA'), (3, 0, 'CERRADA');");
+  run('CREATE VIEW v_saldos AS SELECT c.nom, SUM(t.saldo) AS total FROM cli c INNER JOIN cta t ON t.id_cli = c.id GROUP BY c.nom;', 'Query OK, 0 rows affected');
+  run('SELECT nom, total FROM v_saldos ORDER BY total DESC;', '[["Luis",300],["Ana",150],["Rosa",0]]');
+  run('CREATE VIEW v_saldos AS SELECT 1;', '1050');
+  run('CREATE VIEW v_mala AS SELECT x FROM no_existe;', '1146');
+  run("CREATE OR REPLACE VIEW v_saldos AS SELECT c.nom, c.seg, SUM(t.saldo) AS total FROM cli c INNER JOIN cta t ON t.id_cli = c.id GROUP BY c.nom, c.seg;", 'Query OK, 0 rows affected');
+  run('SHOW TABLES;', '[["cli"],["cta"],["v_saldos"]]');
+  run('DESCRIBE v_saldos;', /./.test('x') ? undefined : 0);
+  run('START TRANSACTION;', 'Query OK, 0 rows affected');
+  run('UPDATE cta SET saldo = saldo - 40 WHERE id = 1;'); run('UPDATE cta SET saldo = saldo + 40 WHERE id = 3;');
+  run('SELECT saldo FROM cta WHERE id IN (1, 3) ORDER BY id;', '[[60],[340]]');
+  run('ROLLBACK;', 'Query OK, 0 rows affected');
+  run('SELECT saldo FROM cta WHERE id IN (1, 3) ORDER BY id;', '[[100],[300]]');
+  run('START TRANSACTION;'); run('UPDATE cta SET saldo = saldo - 40 WHERE id = 1;'); run('COMMIT;');
+  run('SELECT saldo FROM cta WHERE id = 1;', '[[60]]');
+  run("UPDATE cta t INNER JOIN cli c ON t.id_cli = c.id SET t.estado = 'BLOQ', t.saldo = t.saldo + 1 WHERE c.seg = 'A';", 'Query OK, 2 rows affected');
+  run("SELECT id, estado, saldo FROM cta ORDER BY id;", '[[1,"BLOQ",61],[2,"BLOQ",51],[3,"ACTIVA",300],[4,"CERRADA",0]]');
+  run("UPDATE cli c SET c.seg = 'Z' WHERE c.id = 3;", 'Query OK, 1 row affected');
+  run("UPDATE cli SET seg = (SELECT CASE WHEN SUM(saldo) > 200 THEN 'A' ELSE 'B' END FROM cta WHERE cta.id_cli = cli.id) WHERE id IN (1, 2);", 'Query OK, 2 rows affected');
+  run('SELECT seg FROM cli ORDER BY id;', '[["B"],["A"],["Z"]]');
+  run('UPDATE cta t JOIN cli c ON t.id_cli = c.id SET t.saldo = 0;', 'Query OK, 4 rows affected');
+  run("DELETE t FROM cta t INNER JOIN cli c ON t.id_cli = c.id WHERE c.seg = 'Z';", 'Query OK, 1 row affected');
+  run('SELECT COUNT(*) FROM cta;', '[[3]]');
+  run('CREATE INDEX idx_cta_cli ON cta (id_cli, estado);', 'Query OK, 0 rows affected');
+  run('CREATE INDEX idx_cta_cli ON cta (id_cli);', '1061');
+  run('ALTER TABLE cta ADD COLUMN nota VARCHAR(10);');
+  if (!E.idx.length || !E.scalar("SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'idx_cta_cli'")) { f++; console.log('FALLO: el indice no sobrevive al ALTER'); }
+  run('SELECT nom, total FROM v_saldos ORDER BY nom;', '[["Ana",0],["Luis",0]]');
+  run('ALTER TABLE cta ADD CONSTRAINT ck_saldo CHECK (saldo >= 0);', 'Query OK, 0 rows affected');
+  run('UPDATE cta SET saldo = -5 WHERE id = 1;', '3819');
+  run("INSERT INTO cli (nom, seg) SELECT CONCAT(nom, '2'), seg FROM cli WHERE NOT EXISTS (SELECT 1 FROM cta WHERE cta.id_cli = cli.id);", 'Query OK, 1 row affected');
+  run('SELECT nom, RANK() OVER (ORDER BY id DESC), ROW_NUMBER() OVER (PARTITION BY seg ORDER BY id) FROM cli ORDER BY id LIMIT 2;', '[["Ana",4,1],["Luis",3,1]]');
+  run("SELECT nom FROM cli WHERE seg = 'A' UNION SELECT nom FROM cli WHERE id = 1 ORDER BY nom;", '[["Ana"],["Luis"]]');
+  run('START TRANSACTION;'); const r = run('CREATE TABLE z9 (a INT);'); if (!r.notes.length || E.tx) { f++; console.log('FALLO: DDL debe confirmar la transaccion'); }
+  run('DROP VIEW IF EXISTS v_saldos;', 'Query OK, 0 rows affected'); run('DROP VIEW v_saldos;', '1051');
+  console.log(f ? 'FALLOS INTERMEDIO: ' + f : 'MOTOR INTERMEDIO OK');
+});

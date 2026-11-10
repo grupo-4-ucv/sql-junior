@@ -11,13 +11,14 @@
   const fechaCorta = iso => iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4);
   const parrafos = t => String(t).split('\n').filter(x => x.trim()).map(x => '<p>' + esc(x) + '</p>').join('');
   const texto = (v, f) => typeof v === 'function' ? v(f) : v;
+  const PPD = () => E.pistasDia || CFG.PISTAS_POR_DIA;
   const semilla = () => UI.S.al.id + '|' + g.esc + '|' + g.intento;
 
   /* ---------- partida ---------- */
   J.nueva = function (escId, intento) {
     UI.S.g = {
       esc: escId, intento: intento, d: 0, i: 0, fase: 'trabajo', log: [], ini: 0, sel: false, charlas: [], cur: nuevoCur(),
-      res: [[], [], [], [], []], pistasDia: 0, seg: [0, 0, 0, 0, 0],
+      res: SJ.escenarios[escId].dias.map(() => []), pistasDia: 0, seg: SJ.escenarios[escId].dias.map(() => 0),
       integ: { salidas: 0, fuera: 0, pega: 0, copia: 0 }, desc: { usado: false, fin: 0 },
       viol: { mayus: 0, ifexists: 0, inscols: 0, sinpc: 0, safe: 0, err: 0 }, sello: false, fin: null
     };
@@ -26,6 +27,7 @@
 
   J.abrir = function () {
     g = UI.S.g; E = SJ.escenarios[g.esc];
+    if (!E) return UI.ruta();
     document.body.dataset.esc = g.esc;
     hist = []; hi = 0;
     if (g.fase === 'reporte') return J.reporte();
@@ -41,7 +43,7 @@
     UI.pinta('<div class="juego"><div class="barra px"><h2>' + esc(E.nombre) + '</h2>' +
       '<span class="chip" id="j-dia"></span><span class="chip">Tiempo <b id="j-t">00:00</b> / ' + UI.tiempo(dia().min * 60) + '</span>' +
       '<span class="chip">Semana <b id="j-p">--</b></span><span class="chip">Pistas hoy <b id="j-h"></b></span><span class="sep"></span>' +
-      '<button class="btn sec mini" id="b-libreta">Libreta</button><button class="btn sec mini" id="b-normas">Normas</button><button class="btn sec mini" id="b-desc">Descanso</button></div>' +
+      SJ.Son.boton() + '<button class="btn sec mini" id="b-libreta">Libreta</button><button class="btn sec mini" id="b-normas">Normas</button><button class="btn sec mini" id="b-desc">Descanso</button></div>' +
       '<div class="cuerpo"><div class="izq"><canvas class="escena" id="j-escena" width="200" height="72"></canvas>' +
       '<div class="tickets" id="j-tickets"></div>' +
       '<div class="fila"><button class="btn" id="b-entregar">Entregar</button><button class="btn sec mini" id="b-pista">Pista</button>' +
@@ -86,8 +88,8 @@
     const R = reto(), d = dia();
     if (!R) { $('#j-sol').innerHTML = '<h3>Jornada terminada</h3>'; $('#j-dia').textContent = d.nombre; J.prompt(); J.pintaTiempo(); return; }
     const quien = R.de === 'jefe' ? E.jefe : E.gente[R.de];
-    $('#j-dia').innerHTML = esc(d.nombre) + ' ' + fechaCorta(d.fecha) + ' <b>día ' + (g.d + 1) + '/5</b>';
-    $('#j-h').textContent = (CFG.PISTAS_POR_DIA - g.pistasDia) + '/' + CFG.PISTAS_POR_DIA;
+    $('#j-dia').innerHTML = esc(d.nombre) + ' ' + fechaCorta(d.fecha) + ' <b>día ' + (g.d + 1) + '/' + E.dias.length + '</b>';
+    $('#j-h').textContent = (PPD() - g.pistasDia) + '/' + PPD();
     const hechos = [].concat.apply([], g.res).filter(Boolean);
     $('#j-p').textContent = hechos.length ? Math.round(hechos.reduce((a, r) => a + r.p, 0) / hechos.length) + '%' : '--';
     $('#j-tickets').innerHTML = d.retos.map(function (_, k) {
@@ -98,7 +100,7 @@
     $('#j-sol').innerHTML = '<div class="de"><canvas id="j-av" width="16" height="16" style="width:56px;height:56px"></canvas><div><b>' + esc(quien.nombre) + '</b><span>' + esc(quien.cargo) + '</span></div></div>' +
       '<h3>Solicitud ' + (g.i + 1) + ' de ' + d.retos.length + ': ' + esc(R.titulo) + '</h3><div class="cuerpo-txt">' + parrafos(texto(R.texto, sim.f)) + '</div>' + pistas +
       '<p class="etq" style="color:inherit;opacity:.7">' + (R.ref ? 'Se evalúa tu último SELECT ejecutado.' : 'Se evalúa el estado de la base de datos.') + '</p>';
-    if (SJ.Pix) { SJ.Pix.avatar($('#j-av'), quien.nombre); SJ.Pix.escena($('#j-escena'), g.esc, g.d, g.i / d.retos.length); }
+    if (SJ.Pix) { SJ.Pix.avatar($('#j-av'), quien.nombre); SJ.Pix.escena($('#j-escena'), g.esc, g.d, g.i / d.retos.length, d.fecha); }
     $('#j-ver').innerHTML = '';
     J.prompt(); J.pintaTiempo();
   };
@@ -152,6 +154,7 @@
       r.lint.forEach(l => { g.viol[l.id]++; html += '<div class="tip">Norma del equipo: ' + esc(l.msg) + '. Se ejecutó, pero resta en buenas prácticas.</div>'; });
     });
     if (!o.res.length) html += '<div class="info">No hay ninguna sentencia para ejecutar.</div>';
+    SJ.Son.tocar(todoBien ? 'ok' : 'error');
     J.escribe(html);
     if (o.nuevos.length) g.log.push.apply(g.log, o.nuevos);
     g.sel = sim.E.sel;
@@ -169,7 +172,7 @@
   /* ---------- charlas del jefe y libreta ---------- */
   const notaHtml = n => '<div class="nota"><h3>' + esc(n.t) + '</h3><pre>' + esc(n.s) + '</pre><p class="etq" style="color:inherit">Ejemplo</p><pre>' + esc(n.e) + '</pre>' + (n.n ? '<p>' + esc(n.n) + '</p>' : '') + '</div>';
   J.charlaSiToca = function () {
-    const ch = SJ.CHARLAS.find(c => c.dia === g.d && c.en === g.i), clave = g.d + '-' + g.i;
+    const ch = (E.charlas || SJ.CHARLAS).find(c => c.dia === g.d && c.en === g.i), clave = g.d + '-' + g.i;
     if (!ch || g.charlas.indexOf(clave) >= 0) return;
     const lineas = (ch.en === 0 ? [E.jefe.saludos[g.d].replace('{nombre}', UI.S.al.nom.split(' ')[0])] : []).concat(ch.dice);
     let n = 0, pos = 0, tm = null;
@@ -181,7 +184,7 @@
     const escribe = function () {
       clearInterval(tm); pos = 0; txt.textContent = '';
       $('#ch-n', v).textContent = (n + 1) + ' / ' + lineas.length;
-      tm = setInterval(function () { pos += 2; txt.textContent = lineas[n].slice(0, pos); if (pos >= lineas[n].length) clearInterval(tm); }, 22);
+      tm = setInterval(function () { pos += 2; txt.textContent = lineas[n].slice(0, pos); if (pos % 6 === 0) SJ.Son.tocar('blip'); if (pos >= lineas[n].length) clearInterval(tm); }, 22);
     };
     btn.onclick = function () {
       if (n >= lineas.length) { g.charlas.push(clave); UI.guardar(); UI.cerrar(); const ta = $('#j-sql'); if (ta) ta.focus(); return; }
@@ -195,7 +198,7 @@
     escribe();
   };
   J.libreta = function () {
-    const vistas = SJ.CHARLAS.filter(c => g.charlas.indexOf(c.dia + '-' + c.en) >= 0);
+    const vistas = (E.charlas || SJ.CHARLAS).filter(c => g.charlas.indexOf(c.dia + '-' + c.en) >= 0);
     const v = UI.ventana('<h2>Libreta de apuntes</h2>' + (vistas.length ? vistas.map(c => '<h3 class="oro">' + esc(E.dias[c.dia].nombre + ': ' + c.titulo) + '</h3><div class="libreta">' + c.notas.map(notaHtml).join('') + '</div>').join('')
       : '<p>Todavía no tienes apuntes.</p>') + '<div class="fila"><button class="btn" id="lb-ok" data-foco>Cerrar</button></div>', true);
     $('#lb-ok', v).onclick = UI.cerrar;
@@ -204,10 +207,10 @@
   /* ---------- pistas, restaurar, omitir ---------- */
   J.pista = function () {
     const R = reto(), k = g.cur.pistas.length;
-    if (g.pistasDia >= CFG.PISTAS_POR_DIA) return UI.aviso('Ya usaste tus ' + CFG.PISTAS_POR_DIA + ' pistas de hoy.');
+    if (g.pistasDia >= PPD()) return UI.aviso(PPD() === 1 ? 'Ya usaste tu pista de hoy.' : 'Ya usaste tus ' + PPD() + ' pistas de hoy.');
     if (k >= R.pistas.length) return UI.aviso('No hay más pistas para esta solicitud.');
-    UI.confirma('Pedir una pista', 'Cada pista descuenta ' + CFG.DESCUENTO_PISTA + ' puntos de esta solicitud. Te quedan ' + (CFG.PISTAS_POR_DIA - g.pistasDia) + ' por hoy. Recuerda que la libreta es gratis.', 'Usar pista', function () {
-      g.cur.pistas.push(k); g.pistasDia++; UI.guardar(); J.refresca();
+    UI.confirma('Pedir una pista', 'Cada pista descuenta ' + (E.descPista || CFG.DESCUENTO_PISTA) + ' puntos de esta solicitud. Te quedan ' + (PPD() - g.pistasDia) + ' por hoy. Recuerda que la libreta es gratis.', 'Usar pista', function () {
+      g.cur.pistas.push(k); g.pistasDia++; UI.guardar(); J.refresca(); SJ.Son.tocar('pista');
     });
   };
   J.restaurar = function () {
@@ -233,6 +236,7 @@
     let v;
     try { v = sim.evalua(); } catch (e) { v = { ok: false, sinIntento: true, msgs: ['No se pudo evaluar: ' + (e.message || e)] }; }
     if (v.ok) return J.cierra(false);
+    SJ.Son.tocar('error');
     if (!v.sinIntento) g.cur.fallos++;
     UI.guardar();
     const desc = Math.min(CFG.MAX_DESCUENTO_FALLO, g.cur.fallos * CFG.DESCUENTO_FALLO);
@@ -241,7 +245,7 @@
     $('#j-ver').scrollIntoView({ block: 'nearest' });
   };
   J.cierra = function (omit) {
-    const cur = g.cur, R = reto(), pt = SJ.puntua(cur.st, cur.fallos, cur.pistas.length, omit);
+    const cur = g.cur, R = reto(), pt = SJ.puntua(cur.st, cur.fallos, cur.pistas.length, omit, E.descPista);
     const sol = omit ? sim.solucion() : null;
     g.res[g.d][g.i] = { p: pt.p, res: pt.res, prac: pt.prac, pen: pt.pen, pistas: cur.pistas.length, fallos: cur.fallos, omit: !!omit, seg: cur.seg };
     const faltas = { mayus: 0, ifexists: 0, inscols: 0 };
@@ -254,6 +258,7 @@
     const ultimo = g.i >= dia().retos.length;
     if (ultimo) g.fase = 'findia';
     UI.guardar();
+    SJ.Son.tocar(omit ? 'pista' : 'resuelto');
     const v = UI.ventana('<h2>' + (omit ? 'Solicitud omitida' : 'Solicitud resuelta') + '</h2><p>' + esc(R.titulo) + '</p>' +
       '<div class="caja"><div class="barra-pct"><span>Resultado</span><i><b style="width:' + (pt.res / CFG.PUNTOS_RESULTADO * 100) + '%"></b></i><span>' + pt.res + '/' + CFG.PUNTOS_RESULTADO + '</span></div>' +
       '<div class="barra-pct"><span>Buenas prácticas</span><i><b style="width:' + (pt.prac / CFG.PUNTOS_PRACTICAS * 100) + '%"></b></i><span>' + pt.prac + '/' + CFG.PUNTOS_PRACTICAS + '</span></div>' +
@@ -267,14 +272,15 @@
       UI.cerrar();
       if (ultimo) return J.finDia();
       sim.inicia(g.d, g.i, g.cur.st);
-      J.refresca(); J.sistema('--- Nueva solicitud en tu bandeja ---');
+      J.refresca(); J.sistema('--- Nueva solicitud en tu bandeja ---'); SJ.Son.tocar('nueva');
       J.charlaSiToca();
     };
   };
 
   /* ---------- fin del dia ---------- */
   J.finDia = function () {
-    const d = dia(), rs = g.res[g.d], prom = Math.round(rs.reduce((a, r) => a + r.p, 0) / rs.length), fin = g.d >= 4;
+    SJ.Son.tocar('findia');
+    const d = dia(), rs = g.res[g.d], prom = Math.round(rs.reduce((a, r) => a + r.p, 0) / rs.length), fin = g.d >= E.dias.length - 1;
     const v = UI.ventana('<h2>Fin del ' + esc(d.nombre.toLowerCase()) + '</h2><table class="dias"><thead><tr><th>Solicitud</th><th>Puntaje</th><th>Pistas</th><th>Tiempo</th></tr></thead><tbody>' +
       d.retos.map((R, k) => '<tr><td>' + esc(R.titulo) + '</td><td class="' + (rs[k].omit ? 'txt-mal' : rs[k].p >= 80 ? 'txt-ok' : 'txt-aviso') + '">' + (rs[k].omit ? 'omitida' : rs[k].p) + '</td><td>' + rs[k].pistas + '</td><td>' + UI.tiempo(rs[k].seg) + '</td></tr>').join('') +
       '</tbody></table><p>Promedio del día: <b class="oro">' + prom + '%</b> &middot; Tiempo: ' + UI.tiempo(g.seg[g.d]) + ' de ' + UI.tiempo(d.min * 60) + ' sugeridos.</p>' +
@@ -298,6 +304,7 @@
     clearInterval(reloj);
     const S = UI.S, al = S.al, inf = SJ.informe(g, E), v = g.viol, it = g.integ;
     const cod = SJ.codigoReporte(al.id, g.esc, g.intento, inf.pct, g.fin.slice(0, 10));
+    if (!g.sello) SJ.Son.tocar(inf.aprobado ? 'aprobado' : 'reprobado');
     const color = inf.aprobado ? 'txt-ok' : inf.pct >= 60 ? 'txt-aviso' : 'txt-mal';
     const barra = h => '<div class="barra-pct"><span>' + esc(h.nombre) + '</span><i><b class="' + (h.pct >= 80 ? '' : h.pct >= 60 ? 'medio' : 'bajo') + '" style="width:' + h.pct + '%"></b></i><span>' + h.pct + '%</span></div>';
     const linea = (a, b) => '<tr><td>' + esc(a) + '</td><td>' + esc(b) + '</td></tr>';
@@ -321,7 +328,12 @@
       '<div class="px form">' + cierre + '</div></div>');
     const sello = $('#rp-sello'), otra = $('#rp-otra'), rep = $('#rp-rep');
     if (sello) sello.onclick = function () {
-      UI.pideClave('Sello del docente', 'El docente confirma que revisó este reporte (código ' + cod + ', ' + inf.pct + '%).', function () { g.sello = true; UI.guardar(); J.reporte(); });
+      UI.pideClave('Sello del docente', 'El docente confirma que revisó este reporte (código ' + cod + ', ' + inf.pct + '%).', function (clave) {
+        g.sello = true; UI.guardar();
+        // con el tercer reporte aprobado, la misma clave del docente habilita el nivel intermedio
+        if (clave && inf.aprobado && SJ.Cripto.disponible() && SJ.ORDEN_ESCENARIOS.every(id => id === g.esc || S.hechas[id])) SJ.Cripto.abrir(clave).then(ck => { S.llave = ck; UI.guardar(); }).catch(() => { /* se pedira al abrir la empresa */ });
+        J.reporte();
+      });
     };
     if (otra) otra.onclick = function () { S.hechas[g.esc] = { pct: inf.pct, cod: cod, fecha: g.fin }; S.g = null; UI.guardar(); UI.empresas(); };
     if (rep) rep.onclick = function () {
